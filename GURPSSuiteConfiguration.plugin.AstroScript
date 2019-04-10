@@ -1,0 +1,101 @@
+#plugin GURPS Suite Configuration
+#author Alan Bartholet
+#desc   Configure the GURPS Suite.
+
+'Includes
+Include "GURPSSuite.lib.vbs"
+
+'Declare global variables
+Dim sector        'as Sector
+
+'Load the sector
+sector = GetCurrentSector
+
+'Call the main sub
+Main()
+
+Sub Main()
+	SetDefaultConfig()
+	ConfigurationGUI()
+
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Selecting Body Type
+'------------------------------------------------------------------------------
+Sub ConfigurationGUI()
+
+	'Make the interface
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 350, 185
+	w.Centered = TRUE
+
+	l = w.AddLabel()
+	l.SetPosition 90, 10, 100, 24
+	l.Caption = "GURPS Suite Version: " & GURPSSuiteVersion
+
+	'Atmospheric Pressure
+	atmosphericPressureCheckbox = w.AddCheckbox()
+	atmosphericPressureCheckbox.SetPosition 10, 35, 320, 24
+	atmosphericPressureCheckbox.Caption = "Allow GURPS System Builder to modify Atmospheric Pressure."
+
+	If GetGURPSValue(sector, "atmospheric_pressure_flag") = 1 Then
+		atmosphericPressureCheckbox.Checked = TRUE
+	End If
+
+	'Hydrographic Coverage
+	hydrographicCoverageCheckbox = w.AddCheckbox()
+	hydrographicCoverageCheckbox.SetPosition 10, 60, 320, 24
+	hydrographicCoverageCheckbox.Caption = "Allow GURPS System Builder to modify Hydrographic Coverage."
+
+	If GetGURPSValue(sector, "hydrographic_coverage_flag") = 1 Then
+		hydrographicCoverageCheckbox.Checked = TRUE
+	End If
+
+	'Habitability Rating
+	habitabilityRatingCheckbox = w.AddCheckbox()
+	habitabilityRatingCheckbox.SetPosition 10, 85, 320, 24
+	habitabilityRatingCheckbox.Caption = "Allow GURPS System Builder to modify Habitability Rating."
+
+	If GetGURPSValue(sector, "habitability_rating_flag") = 1 Then
+		habitabilityRatingCheckbox.Checked = TRUE
+	End If
+
+	'Display the display
+	If w.ShowModal Then
+
+		If atmosphericPressureCheckbox.Checked = TRUE Then
+			SetGURPSValue sector, "atmospheric_pressure_flag", 1
+		Else
+			SetGURPSValue sector, "atmospheric_pressure_flag", 0
+		End If
+
+		If hydrographicCoverageCheckbox.Checked = TRUE Then
+			SetGURPSValue sector, "hydrographic_coverage_flag", 1
+		Else
+			SetGURPSValue sector, "hydrographic_coverage_flag", 0
+		End If
+
+		If habitabilityRatingCheckbox.Checked = TRUE Then
+			SetGURPSValue sector, "habitability_rating_flag", 1
+		Else
+			SetGURPSValue sector, "habitability_rating_flag", 0
+		End If
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Include Files
+'------------------------------------------------------------------------------
+Sub Include(FilePath)
+	Dim FSO, s, TS
+	Set FSO = CreateObject("Scripting.FileSystemObject")
+	Set TS = FSO.OpenTextFile(PluginDirectory() & "\" & FilePath, 1, False)
+	s = TS.ReadAll
+	TS.Close
+	Set TS = Nothing
+	Set FSO = Nothing
+	ExecuteGlobal s
+End Sub

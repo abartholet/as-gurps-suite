@@ -1,0 +1,93 @@
+#popmenu GURPS System Builder
+#author Alan Bartholet
+#desc   Adds physical data to stars, terrestrial worlds and asteroid belts in all selected systems using the GURPS 4e Space World Design Sequence based on data provided by AstroSythesis.
+
+'Includes
+Include "GURPSSuite.lib.vbs"
+
+'Declare global variables
+Dim unloadBody    'as Bool
+Dim sector        'as Sector
+
+'Load the sector
+sector = GetCurrentSector
+
+'Call the main sub
+Main()
+
+Sub Main()
+	'Declare variables
+	Dim body             'as Body
+	Dim i, keyHit, mb    'as Int
+	Dim buildChildren    'as Bool
+
+	SetDefaultConfig()
+
+	'Display processing message
+	sector.RenderMessageBig = "Running GURPS System Builder..."
+	sector.RenderMessageSmall = "Press 'Esc' to Exit"
+	RefreshScene
+
+	'Check for selected body
+	If Not IsNull(EditingBody()) Then
+
+		'Check for Escape Key
+		keyHit = GetKey()
+		If keyHit = 27 Then
+			Exit Sub
+		End If
+		ProcessMessages
+
+		'Get selected body
+		body = EditingBody()
+
+		'Make sure the root body is loaded
+		If Not body.Loaded Then
+			sector.DynaLoad(body)    'Load the body into memory
+			unloadBody = TRUE        'Flag the body to be unloaded
+		End If
+
+		'Ask if children should be built
+		If body.ChildrenCount() > 0 Then
+			'Display the message box
+			mb = MsgBox("Build child bodies?",292, "GUPRS System Builder")
+
+			If mb = 6 Then
+				buildChildren = TRUE
+			Else
+				buildChildren = FALSE
+			End If
+		End If
+
+		'Display processing message
+		sector.RenderMessageBig = "Building Body: " & CStr(body.Name)
+		sector.RenderMessageSmall = "Press 'Esc' to Exit"
+		RefreshScene
+
+		'Build the system
+		BuildSystem body, buildChildren
+
+		'Unload the body if there haven't been any changes made
+		If unloadBody = TRUE Then
+			sector.DynaUnload(body)  'Unload the body from memory
+		Else
+			body.UpdateRootBody()    'Update the root body
+			body.ModifySystem()      'Flag the system as modified
+		End If
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Include Files
+'------------------------------------------------------------------------------
+Sub Include(FilePath)
+	Dim FSO, s, TS
+	Set FSO = CreateObject("Scripting.FileSystemObject")
+	Set TS = FSO.OpenTextFile(PluginDirectory() & "\" & FilePath, 1, FALSE)
+	s = TS.ReadAll
+	TS.Close
+	Set TS = Nothing
+	Set FSO = Nothing
+	ExecuteGlobal s
+End Sub

@@ -1,0 +1,96 @@
+#plugin GURPS System Builder
+#author Alan Bartholet
+#desc   Adds physical data to stars, terrestrial worlds and asteroid belts in all selected systems using the GURPS 4e Space World Design Sequence based on data provided by AstroSythesis.
+
+'Includes
+Include "GURPSSuite.lib.vbs"
+
+'Declare global variables
+Dim unloadBody    'as Bool
+Dim sector        'as Sector
+
+'Load the sector
+sector = GetCurrentSector
+
+'Call the main sub
+Main()
+
+Sub Main()
+	'Declare variables
+	Dim body                        'as Body
+	Dim i, keyHit                   'as Int
+	Dim selectedCount, buildCount   'as Int
+
+	SetDefaultConfig()
+
+	'Display processing message
+	sector.RenderMessageBig = "Running GURPS System Builder..."
+	sector.RenderMessageSmall = "Press 'Esc' to Exit"
+	RefreshScene
+
+	selectedCount = 0
+	For i = 1 To sector.SystemCount
+		body = sector.GetSystem(i - 1)
+		If body.Selected Then
+			selectedCount = selectedCount + 1
+		End If
+	Next
+
+	buildCount = 0
+	'Loop through all systems
+	For i = 1 To sector.SystemCount
+
+		'Check for Escape Key
+		keyHit = GetKey()
+		If keyHit = 27 Then
+			Exit Sub
+		End If
+		ProcessMessages
+
+		'Select the current root body
+		body = sector.GetSystem(i - 1)
+
+		If body.Selected Then
+			'Make sure the root body is loaded
+			If Not body.Loaded Then
+				sector.DynaLoad(body) 'Load the body into memory
+				unloadBody = TRUE     'Flag the body to be unloaded
+			End If
+
+			'Display processing message
+			If FormatNumber((buildCount / selectedCount) * 100, 0) Mod 5 = 0 Then
+				sector.RenderMessageBig = "Running GURPS System Builder: " & FormatNumber((buildCount / selectedCount) * 100, 0) & "%"
+				sector.RenderMessageSmall = "Press 'Esc' to Exit"
+				RefreshScene
+			End If
+
+			'Build the system
+			BuildSystem body, TRUE
+
+			'Unload the body if there haven't been any changes made
+			If unloadBody = TRUE Then
+				sector.DynaUnload(body)    'Unload the body from memory
+			Else
+				body.UpdateRootBody()      'Update the root body
+				body.ModifySystem()        'Flag the system as modified
+			End If
+
+			buildCount = buildCount + 1
+		End If
+	Next
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Include Files
+'------------------------------------------------------------------------------
+Sub Include(FilePath)
+	Dim FSO, s, TS
+	Set FSO = CreateObject("Scripting.FileSystemObject")
+	Set TS = FSO.OpenTextFile(PluginDirectory() & "\" & FilePath, 1, FALSE)
+	s = TS.ReadAll
+	TS.Close
+	Set TS = Nothing
+	Set FSO = Nothing
+	ExecuteGlobal s
+End Sub

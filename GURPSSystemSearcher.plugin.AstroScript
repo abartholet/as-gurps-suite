@@ -1,0 +1,405 @@
+#plugin GURPS System Searcher
+#author Alan Bartholet
+#desc   Searchers for body properties added by GURPS System Builder.
+
+'Includes
+Include "GURPSSuite.lib.vbs"
+
+'Declare global variables
+Dim sector        'as Sector
+
+'Load the sector
+sector = GetCurrentSector
+
+'Call the main sub
+Main()
+
+Sub Main()
+	SelectBodyTypeGUI()
+
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Selecting Body Type
+'------------------------------------------------------------------------------
+Sub SelectBodyTypeGUI()
+
+	'Make the interface
+	set w = NewDialogWindow()
+		w.SetPosition 10, 20, 230, 215
+		w.Centered = TRUE
+
+	radio = w.AddRadioGroup()
+		radio.SetPosition 10, 10, 200, 135
+		radio.Columns = 1
+		radio.AddItem "Search for Terrestrial Bodies."
+		radio.AddItem "Search for Asteroid Belts."
+		radio.AddItem "Search for Planetoids."
+		radio.AddItem "Search for Gas Gaints."
+		radio.AddItem "Search for Stars."
+		radio.Text = "Search for Terrestrial Bodies."
+
+	'Display the display
+	If w.ShowModal Then
+		Select Case radio.Text
+			Case "Search for Terrestrial Bodies."
+				SearchTerrestrialGUI()
+
+			Case "Search for Asteroid Belts."
+				SearchAsteroidBeltGUI()
+
+			Case "Search for Planetoids."
+				SearchPlanetoidGUI()
+
+			Case "Search for Gas Gaints."
+				SearchGasGiantGUI()
+
+			Case "Search for Stars."
+				SearchStarGUI()
+
+		End Select
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Searching Stars
+'------------------------------------------------------------------------------
+Sub SearchStarGUI()
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 220, 100
+	w.Centered = TRUE
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Stellar Age:"
+
+	stellarAgeTextEdit = w.AddTextEdit()
+	stellarAgeTextEdit.SetPosition 70, 8, 50, 24
+
+	l = w.AddLabel()
+	l.SetPosition 125, 10, 100, 24
+	l.Caption = "Billion Years"
+
+	'Display the display
+	If w.ShowModal Then
+
+		'Validate the stellar age
+		If Not IsNumeric(stellarAgeTextEdit.Text) Then
+			MsgBox "Stellar Age must be a number.",16
+			SearchStarGUI()
+			Exit Sub
+		End If
+
+		src = CreateSearcher()
+		src.BodyType = BODY_TYPE_STAR
+		src.AddFieldSearch "Stellar Age", FormatNumber(stellarAgeTextEdit.Text,1,,,0)
+		sector.Search src
+		ShowSearchResults src
+		FreeObject src
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Searching Asteroid Belts
+'------------------------------------------------------------------------------
+Sub SearchAsteroidBeltGUI()
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 250, 110
+	w.Centered = TRUE
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Resource Value:"
+
+	resourceValueDropList = w.AddDropList()
+	resourceValueDropList.SetPosition 95, 8, 120, 24
+	For i = 1 To Ubound(RESOURCE_VALUE_ARRAY) + 1
+		resourceValueDropList.AddItem RESOURCE_VALUE_ARRAY(i - 1)
+	Next
+
+	'Display the display
+	If w.ShowModal Then
+
+		If resourceValueDropList.Text = "" Then
+			MsgBox "Resource Value is required.",16
+			SearchAsteroidBeltGUI()
+			Exit Sub
+		End If
+
+		src = CreateSearcher()
+		src.BodyType = BODY_TYPE_ASTEROIDBELT
+		src.AddFieldSearch "Resource Value", resourceValueDropList.Text
+		sector.Search src
+		ShowSearchResults src
+		FreeObject src
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Searching Planetoids
+'------------------------------------------------------------------------------
+Sub SearchPlanetoidGUI()
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 250, 110
+	w.Centered = TRUE
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Resource Value:"
+
+	resourceValueDropList = w.AddDropList()
+	resourceValueDropList.SetPosition 95, 8, 120, 24
+	For i = 1 To Ubound(RESOURCE_VALUE_ARRAY) + 1
+		resourceValueDropList.AddItem RESOURCE_VALUE_ARRAY(i - 1)
+	Next
+
+	'Display the display
+	If w.ShowModal Then
+
+		If resourceValueDropList.Text = "" Then
+			MsgBox "Resource Value is required.",16
+			SearchPlanetoidGUI()
+			Exit Sub
+		End If
+
+		src = CreateSearcher()
+		src.BodyType = BODY_TYPE_PLANETOID
+		src.AddFieldSearch "Resource Value", resourceValueDropList.Text
+		sector.Search src
+		ShowSearchResults src
+		FreeObject src
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Searching Gas Gaints
+'------------------------------------------------------------------------------
+Sub SearchGasGiantGUI()
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 200, 110
+	w.Centered = TRUE
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Size:"
+
+	gasSizeDropList = w.AddDropList()
+	gasSizeDropList.SetPosition 40, 8, 120, 24
+	For i = 1 To Ubound(GAS_SIZE_ARRAY) + 1
+		gasSizeDropList.AddItem GAS_SIZE_ARRAY(i - 1)
+	Next
+
+	'Display the display
+	If w.ShowModal Then
+
+		If gasSizeDropList.Text = "" Then
+			MsgBox "Gas Giant size is required.",16
+			SearchGasGiantGUI()
+			Exit Sub
+		End If
+
+		src = CreateSearcher()
+		src.BodyType = BODY_TYPE_GASGIANT
+		src.AddFieldSearch "Gas Giant Size", gasSizeDropList.Text
+		sector.Search src
+	ShowSearchResults src
+		FreeObject src
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Searching Terrestrial
+'------------------------------------------------------------------------------
+Sub SearchTerrestrialGUI()
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 375, 380
+	w.Centered = TRUE
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Size:"
+
+	terrestrialSizeDropList = w.AddDropList()
+	terrestrialSizeDropList.SetPosition 40, 8, 80, 24
+	For i = 1 To Ubound(TERRESTRIAL_SIZE_ARRAY) + 1
+		terrestrialSizeDropList.AddItem TERRESTRIAL_SIZE_ARRAY(i - 1)
+	Next
+
+	l = w.AddLabel()
+	l.SetPosition 130, 10, 100, 24
+	l.Caption = "Type:"
+
+	terrestrialTypeDropList = w.AddDropList()
+	terrestrialTypeDropList.SetPosition 165, 8, 90, 24
+	For i = 1 To Ubound(TERRESTRIAL_TYPE_ARRAY) + 1
+		terrestrialTypeDropList.AddItem TERRESTRIAL_TYPE_ARRAY(i - 1)
+	Next
+
+	l = w.AddLabel()
+	l.SetPosition 10, 45, 100, 24
+	l.Caption = "Atmosphere Composition:"
+
+	atmosphericCompositionDropList = w.AddDropList()
+	atmosphericCompositionDropList.SetPosition 132, 43, 225, 24
+	For i = 1 To Ubound(ATMOSPHERIC_COMPOSITION_ARRAY) + 1
+		atmosphericCompositionDropList.AddItem ATMOSPHERIC_COMPOSITION_ARRAY(i - 1)
+	Next
+
+	l = w.AddLabel()
+	l.SetPosition 10, 80, 100, 24
+	l.Caption = "Atmosphere Density:"
+
+	atmosphericDensityDropList = w.AddDropList()
+	atmosphericDensityDropList.SetPosition 112, 78, 80, 24
+	For i = 1 To Ubound(ATMOSPHERIC_DENSITY_ARRAY) + 1
+		atmosphericDensityDropList.AddItem ATMOSPHERIC_DENSITY_ARRAY(i - 1)
+	Next
+
+	l = w.AddLabel()
+	l.SetPosition 10, 115, 100, 24
+	l.Caption = "Climate:"
+
+	climateTypeDropList = w.AddDropList()
+	climateTypeDropList.SetPosition 50, 113, 80, 24
+	For i = 1 To Ubound(CLIMATE_TYPE_ARRAY) + 1
+		climateTypeDropList.AddItem CLIMATE_TYPE_ARRAY(i - 1)
+	Next
+
+	l = w.AddLabel()
+	l.SetPosition 10, 150, 100, 24
+	l.Caption = "Volcanic Activity:"
+
+	volcanicActivityDropList = w.AddDropList()
+	volcanicActivityDropList.SetPosition 95, 148, 80, 24
+	For i = 1 To Ubound(GEOLOGICAL_ACTIVITY_ARRAY) + 1
+		volcanicActivityDropList.AddItem GEOLOGICAL_ACTIVITY_ARRAY(i - 1)
+	Next
+
+	l = w.AddLabel()
+	l.SetPosition 10, 185, 100, 24
+	l.Caption = "Tectonic Activity:"
+
+	tectonicActivityDropList = w.AddDropList()
+	tectonicActivityDropList.SetPosition 95, 183, 80, 24
+	For i = 1 To Ubound(GEOLOGICAL_ACTIVITY_ARRAY) + 1
+		tectonicActivityDropList.AddItem GEOLOGICAL_ACTIVITY_ARRAY(i - 1)
+	Next
+
+	l = w.AddLabel()
+	l.SetPosition 10, 220, 100, 24
+	l.Caption = "Resource Value:"
+
+	resourceValueDropList = w.AddDropList()
+	resourceValueDropList.SetPosition 95, 218, 120, 24
+	For i = 3 To Ubound(RESOURCE_VALUE_ARRAY) - 1
+		resourceValueDropList.AddItem RESOURCE_VALUE_ARRAY(i - 1)
+	Next
+
+	l = w.AddLabel()
+	l.SetPosition 10, 255, 100, 24
+	l.Caption = "Habitability Value:"
+
+	habitabilityValueDropList = w.AddDropList()
+	habitabilityValueDropList.SetPosition 95, 253, 50, 24
+	For i = -2 To 8
+		habitabilityValueDropList.AddItem GetSign(i)
+	Next
+
+	l = w.AddLabel()
+	l.SetPosition 10, 290, 100, 24
+	l.Caption = "Affinity Score:"
+
+	affinityScoreDropList = w.AddDropList()
+	affinityScoreDropList.SetPosition 95, 288, 50, 24
+	For i = -5 To 10
+		affinityScoreDropList.AddItem GetSign(i)
+	Next
+
+	'Display the display
+	If w.ShowModal Then
+
+		searchFlag = FALSE
+		src = CreateSearcher()
+		src.BodyType = BODY_TYPE_TERRESTRIAL
+
+		If terrestrialSizeDropList.Text <> "" Then
+			src.AddFieldSearch "Terrestrial Size", terrestrialSizeDropList.Text
+			searchFlag = TRUE
+		End If
+
+		If terrestrialTypeDropList.Text <> "" Then
+			src.AddFieldSearch "Terrestrial Type", terrestrialTypeDropList.Text
+			searchFlag = TRUE
+		End If
+
+		If atmosphericCompositionDropList.Text <> "" Then
+			src.AddFieldSearch "Atmospheric Composition", "." & atmosphericCompositionDropList.Text & "."
+			searchFlag = TRUE
+		End If
+
+		If atmosphericDensityDropList.Text <> "" Then
+			src.AddFieldSearch "Atmospheric Density", "." & atmosphericDensityDropList.Text & "."
+			searchFlag = TRUE
+		End If
+
+		If climateTypeDropList.Text <> "" Then
+			src.AddFieldSearch "Climate", climateTypeDropList.Text
+			searchFlag = TRUE
+		End If
+
+		If volcanicActivityDropList.Text <> "" Then
+			src.AddFieldSearch "Volcanic Activity", volcanicActivityDropList.Text
+			searchFlag = TRUE
+		End If
+
+		If tectonicActivityDropList.Text <> "" Then
+			src.AddFieldSearch "Tectonic Activity", tectonicActivityDropList.Text
+			searchFlag = TRUE
+		End If
+
+		If resourceValueDropList.Text <> "" Then
+			src.AddFieldSearch "Resource Value", resourceValueDropList.Text
+			searchFlag = TRUE
+		End If
+
+		If habitabilityValueDropList.Text <> "" Then
+			src.AddFieldSearch "Habitability Value", habitabilityValueDropList.Text
+			searchFlag = TRUE
+		End If
+
+		If affinityScoreDropList.Text <> "" Then
+			src.AddFieldSearch "Affinity Score", affinityScoreDropList.Text
+			searchFlag = TRUE
+		End If
+
+		If searchFlag = TRUE Then
+			sector.Search src
+			ShowSearchResults src
+			FreeObject src
+		Else
+			MsgBox "No search parameters selected.",16
+			SearchTerrestrialGUI()
+			Exit Sub
+		End If
+	End If
+End Sub
+
+'------------------------------------------------------------------------------
+'Include Files
+'------------------------------------------------------------------------------
+Sub Include(FilePath)
+	Dim FSO, s, TS
+	Set FSO = CreateObject("Scripting.FileSystemObject")
+	Set TS = FSO.OpenTextFile(PluginDirectory() & "\" & FilePath, 1, FALSE)
+	s = TS.ReadAll
+	TS.Close
+	Set TS = Nothing
+	Set FSO = Nothing
+	ExecuteGlobal s
+End Sub

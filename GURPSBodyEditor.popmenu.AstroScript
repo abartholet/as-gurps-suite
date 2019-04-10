@@ -1,0 +1,616 @@
+#popmenu GURPS Body Editor
+#author Alan Bartholet
+#desc   Edits physical data of stars, terrestrial worlds and asteroid belts using the GURPS 4e Space World Design Sequence based on data provided by AstroSythesis.
+
+'Includes
+Include "GURPSSuite.lib.vbs"
+
+'Declare global variables
+Dim unloadBody    'as Bool
+Dim sector        'as Sector
+
+'Load the sector
+sector = GetCurrentSector
+
+'Call the main sub
+Main()
+
+Sub Main()
+	'Declare variables
+	Dim body             'as Body
+	Dim i, keyHit, mb    'as Int
+	Dim buildChildren    'as Bool
+
+	'Display processing message
+	sector.RenderMessageBig = "Running GURPS Body Editor..."
+	sector.RenderMessageSmall = "Press 'Esc' to Exit"
+	RefreshScene
+
+	'Check for selected body
+	If Not IsNull(EditingBody()) Then
+
+		'Check for Escape Key
+		keyHit = GetKey()
+		If keyHit = 27 Then
+			Exit Sub
+		End If
+		ProcessMessages
+
+		'Get selected body
+		body = EditingBody()
+
+		'Make sure the root body is loaded
+		If Not body.Loaded Then
+			sector.DynaLoad(body)    'Load the body into memory
+			unloadBody = True        'Flag the body to be unloaded
+		End If
+
+		'Display processing message
+		sector.RenderMessageBig = "Editing Body: " & CStr(body.Name)
+		sector.RenderMessageSmall = "Press 'Esc' to Exit"
+		RefreshScene
+
+		'Edit Star
+		If body.TypeID = BODY_TYPE_STAR Or body.TypeID = BODY_TYPE_CLOSEMULT Or body.TypeID = BODY_TYPE_MULT Then
+			EditStarGUI body
+
+		'Edit Terrestrial
+		ElseIf body.TypeID = BODY_TYPE_TERRESTRIAL Then
+			EditTerrestrialGUI body
+
+		'Edit Asteroid Belt
+		ElseIf body.TypeID = BODY_TYPE_ASTEROIDBELT Then
+			EditAsteroidBeltGUI body
+
+		'Edit Planetoid
+		ElseIf body.TypeID = BODY_TYPE_PLANETOID Then
+			EditPlanetoidGUI body
+
+		'Edit Gas Giant
+		ElseIf body.TypeID = BODY_TYPE_GASGIANT Then
+			EditGasGiantGUI body
+		End If
+
+		'Unload the body if there haven't been any changes made
+		If unloadBody = True Then
+			sector.DynaUnload(body)    'Unload the body from memory
+		Else
+			body.UpdateRootBody()      'Update the root body
+			body.ModifySystem()        'Flag the system as modified
+		End If
+	End If
+End Sub
+
+'------------------------------------------------------------------------------
+'GUI for Editing Stars
+'------------------------------------------------------------------------------
+Sub EditStarGUI(body)
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 220, 100
+	w.Centered = true
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Stellar Age:"
+
+	stellarAgeTextEdit = w.AddTextEdit()
+	stellarAgeTextEdit.SetPosition 70, 8, 50, 24
+	stellarAgeTextEdit.Text = GetGURPSValue(body.GetRootBody, "stellar_age")
+
+	l = w.AddLabel()
+	l.SetPosition 125, 10, 100, 24
+	l.Caption = "Billion Years"
+
+	'Display the display
+	If w.ShowModal Then
+
+		'Validate the stellar age
+		If Not IsNumeric(stellarAgeTextEdit.Text) Then
+			MsgBox "Stellar Age must be a number.",16
+			EditStarGUI(body)
+			Exit Sub
+		End If
+
+		'Set the stellar age
+		SetStellarAge body.GetRootBody, FormatNumber(stellarAgeTextEdit.Text,1,,,0)
+	End If
+End Sub
+
+'------------------------------------------------------------------------------
+'GUI for Editing Asteroid Belts
+'------------------------------------------------------------------------------
+Sub EditAsteroidBeltGUI(body)
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 250, 110
+	w.Centered = true
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Resource Value:"
+
+	resourceValueDropList = w.AddDropList()
+	resourceValueDropList.SetPosition 95, 8, 120, 24
+	For i = 1 To Ubound(RESOURCE_VALUE_ARRAY) + 1
+		resourceValueDropList.AddItem RESOURCE_VALUE_ARRAY(i - 1)
+	Next
+
+	If Not GetGURPSValue(body, "resource_value") = "" Then
+		resourceValueDropList.Text = RESOURCE_VALUE_ARRAY(GetGURPSValue(body, "resource_value")+5)
+	End If
+
+	'Display the display
+	If w.ShowModal Then
+
+		If resourceValueDropList.Text = "" Then
+			MsgBox "Resource Value is required.",16
+			EditAsteroidBeltGUI(body)
+			Exit Sub
+		End If
+
+		'Set the Resource Value
+		For i = 1 to Ubound(RESOURCE_VALUE_ARRAY) + 1
+			If RESOURCE_VALUE_ARRAY(i - 1) = resourceValueDropList.Text Then
+				SetGURPSValue body, "resource_value", i - 6
+			End If
+		Next
+
+		'Build the habitability value
+		BuildHabitabilityValue(body)
+
+		'Display the body
+		DisplayAsteroidBeltBody(body)
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Editing Planetoids
+'------------------------------------------------------------------------------
+Sub EditPlanetoidGUI(body)
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 265, 210
+	w.Centered = true
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Mean Temperature (K):"
+
+	meanTemperatureTextEdit = w.AddTextEdit()
+	meanTemperatureTextEdit.SetPosition 130, 8, 50, 24
+	meanTemperatureTextEdit.Text = body.Temp
+
+	l = w.AddLabel()
+	l.SetPosition 185, 10, 50, 24
+	l.Caption = "273K = 0C"
+
+	l = w.AddLabel()
+	l.SetPosition 10, 45, 100, 24
+	l.Caption = "Atmospheric Pressure:"
+
+	atmosphericPressureTextEdit = w.AddTextEdit()
+	atmosphericPressureTextEdit.SetPosition 130, 43, 50, 24
+	atmosphericPressureTextEdit.Text = body.Atmosphere
+
+	l = w.AddLabel()
+	l.SetPosition 185, 45, 50, 24
+	l.Caption = "Earth = 1.0"
+
+	l = w.AddLabel()
+	l.SetPosition 10, 80, 100, 24
+	l.Caption = "Hydrographic Coverage:"
+
+	hydrographicCoverageTextEdit = w.AddTextEdit()
+	hydrographicCoverageTextEdit.SetPosition 130, 78, 50, 24
+	hydrographicCoverageTextEdit.Text = body.Water * 100
+
+	l = w.AddLabel()
+	l.SetPosition 185, 80, 50, 24
+	l.Caption = "0 to 100%"
+
+	l = w.AddLabel()
+	l.SetPosition 10, 115, 100, 24
+	l.Caption = "Resource Value:"
+
+	resourceValueDropList = w.AddDropList()
+	resourceValueDropList.SetPosition 95, 113, 120, 24
+	For i = 1 To Ubound(RESOURCE_VALUE_ARRAY) + 1
+		resourceValueDropList.AddItem RESOURCE_VALUE_ARRAY(i - 1)
+	Next
+
+	If Not GetGURPSValue(body, "resource_value") = "" Then
+		resourceValueDropList.Text = RESOURCE_VALUE_ARRAY(GetGURPSValue(body, "resource_value")+5)
+	End If
+
+	'Display the display
+	If w.ShowModal Then
+
+		If resourceValueDropList.Text = "" Then
+			MsgBox "Resource Value is required.",16
+			EditPlanetoidGUI(body)
+			Exit Sub
+		End If
+
+		'Validate the Mean Temperature
+		If Not IsNumeric(meanTemperatureTextEdit.Text) Then
+			MsgBox "Mean Temperature must be a number.",16
+			EditPlanetoidGUI(body)
+			Exit Sub
+		End If
+
+		If meanTemperatureTextEdit.Text < 0 Then
+			MsgBox "Mean Temperature cannot be less than 0.",16
+			EditPlanetoidGUI(body)
+			Exit Sub
+		End If
+
+		'Validate the Atmospheric Pressure
+		If Not IsNumeric(atmosphericPressureTextEdit.Text) Then
+			MsgBox "Atmospheric Pressure must be a number.",16
+			EditPlanetoidGUI(body)
+			Exit Sub
+		End If
+
+		If atmosphericPressureTextEdit.Text < 0 Then
+			MsgBox "Atmospheric Pressure cannot be less than 0.",16
+			EditPlanetoidGUI(body)
+			Exit Sub
+		End If
+
+		'Set the Resource Value
+		For i = 1 to Ubound(RESOURCE_VALUE_ARRAY) + 1
+			If RESOURCE_VALUE_ARRAY(i - 1) = resourceValueDropList.Text Then
+				SetGURPSValue body, "resource_value", i - 6
+			End If
+		Next
+
+		body.Temp = meanTemperatureTextEdit.Text
+		body.Atmosphere = atmosphericPressureTextEdit.Text
+		body.Water = hydrographicCoverageTextEdit.Text / 100
+
+		'Build the climate type
+		BuildClimateType(body)
+
+		'Build the habitability score
+		BuildHabitabilityValue(body)
+
+		'Display the body
+		DisplayPlanetoidBody(body)
+
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Editing Gas Gaints
+'------------------------------------------------------------------------------
+Sub EditGasGiantGUI(body)
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 200, 110
+	w.Centered = true
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Size:"
+
+	gasSizeDropList = w.AddDropList()
+	gasSizeDropList.SetPosition 40, 8, 120, 24
+	For i = 1 To Ubound(GAS_SIZE_ARRAY) + 1
+		gasSizeDropList.AddItem GAS_SIZE_ARRAY(i - 1)
+	Next
+
+	If Not GetGURPSValue(body, "gas_size") = "" Then
+		gasSizeDropList.Text = GAS_SIZE_ARRAY(GetGURPSValue(body, "gas_size"))
+	End If
+
+	'Display the display
+	If w.ShowModal Then
+
+		If gasSizeDropList.Text = "" Then
+			MsgBox "Gas Giant size is required.",16
+			EditGasGiantGUI(body)
+			Exit Sub
+		End If
+
+		'Set the Gas Giant Size
+		For i = 1 to Ubound(GAS_SIZE_ARRAY) + 1
+			If GAS_SIZE_ARRAY(i - 1) = gasSizeDropList.Text Then
+				SetGURPSValue body, "gas_size", i - 1
+			End If
+		Next
+
+		'Display the body
+		DisplayGasGiantBody(body)
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Editing Terrestrial
+'------------------------------------------------------------------------------
+Sub EditTerrestrialGUI(body)
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 375, 330
+	w.Centered = true
+
+	l = w.AddLabel()
+	l.SetPosition 10, 10, 100, 24
+	l.Caption = "Size (Type) - Atmospheric Composition"
+
+	terrestrialDropList = w.AddDropList()
+	terrestrialDropList.SetPosition 10, 25, 345, 24
+	terrestrialDropList.AddItem "Tiny (Sulfur) - No/Negligible Composition"
+	terrestrialDropList.AddItem "Tiny (Ice) - No/Negligible Composition"
+	terrestrialDropList.AddItem "Tiny (Rock) - No/Negligible Composition"
+	terrestrialDropList.AddItem "Small (Hadean) - No/Negligible Composition"
+	terrestrialDropList.AddItem "Small (Ice) - Suffocating and Mildly Toxic"
+	terrestrialDropList.AddItem "Small (Ice) - Suffocating and Highly Toxic"
+	terrestrialDropList.AddItem "Small (Rock) - No/Negligible Composition"
+	terrestrialDropList.AddItem "Standard (Hadean) - No/Negligible Composition"
+	terrestrialDropList.AddItem "Standard (Ammonia) - Suffocating, Lethally Toxic, and Corrosive"
+	terrestrialDropList.AddItem "Standard (Ice) - Suffocating"
+	terrestrialDropList.AddItem "Standard (Ice) - Suffocating and Mildly Toxic"
+	terrestrialDropList.AddItem "Standard (Ocean) - Suffocating"
+	terrestrialDropList.AddItem "Standard (Ocean) - Suffocating and Mildly Toxic"
+	terrestrialDropList.AddItem "Standard (Garden) - Breathable"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: Chlorine"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: Fluorine"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: Sulfur Compounds"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: Nitrogen Compounds"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: Organic Toxins"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: Low Oxygen"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: Pollutants"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: High Carbon Dioxide"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: High Oxygen"
+	terrestrialDropList.AddItem "Standard (Garden) - Marginal: Inert Gases"
+	terrestrialDropList.AddItem "Standard (Greenhouse) - Suffocating, Lethally Toxic, and Corrosive"
+	terrestrialDropList.AddItem "Standard (Chthonian) - No/Negligible Composition"
+	terrestrialDropList.AddItem "Large (Ammonia) - Suffocating, Lethally Toxic, and Corrosive"
+	terrestrialDropList.AddItem "Large (Ice) - Suffocating and Highly Toxic"
+	terrestrialDropList.AddItem "Large (Ocean) - Suffocating and Highly Toxic"
+	terrestrialDropList.AddItem "Large (Garden) - Breathable"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: Chlorine"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: Fluorine"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: Sulfur Compounds"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: Nitrogen Compounds"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: Organic Toxins"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: Low Oxygen"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: Pollutants"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: High Carbon Dioxide"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: High Oxygen"
+	terrestrialDropList.AddItem "Large (Garden) - Marginal: Inert Gases"
+	terrestrialDropList.AddItem "Large (Greenhouse) - Suffocating, Lethally Toxic, and Corrosive"
+	terrestrialDropList.AddItem "Large (Chthonian) - No/Negligible Composition"
+
+	If Not GetGURPSValue(body, "terrestrial_size") = "" Or Not GetGURPSValue(body, "terrestrial_type") = "" Or Not GetGURPSValue(body, "atmospheric_composition") = "" Then
+		terrestrialDropList.Text = TERRESTRIAL_SIZE_ARRAY(GetGURPSValue(body, "terrestrial_size")) & " (" & TERRESTRIAL_TYPE_ARRAY(GetGURPSValue(body, "terrestrial_type")) & ")" & " - " & ATMOSPHERIC_COMPOSITION_ARRAY(GetGURPSValue(body, "atmospheric_composition"))
+	End If
+
+	l = w.AddLabel()
+	l.SetPosition 10, 60, 100, 24
+	l.Caption = "Mean Temperature (K):"
+
+	meanTemperatureTextEdit = w.AddTextEdit()
+	meanTemperatureTextEdit.SetPosition 130, 58, 50, 24
+	meanTemperatureTextEdit.Text = body.Temp
+
+	l = w.AddLabel()
+	l.SetPosition 185, 60, 50, 24
+	l.Caption = "273K = 0C"
+
+	l = w.AddLabel()
+	l.SetPosition 10, 95, 100, 24
+	l.Caption = "Atmospheric Pressure:"
+
+	atmosphericPressureTextEdit = w.AddTextEdit()
+	atmosphericPressureTextEdit.SetPosition 130, 93, 50, 24
+	atmosphericPressureTextEdit.Text = body.Atmosphere
+
+	l = w.AddLabel()
+	l.SetPosition 185, 95, 50, 24
+	l.Caption = "Earth = 1.0"
+
+	l = w.AddLabel()
+	l.SetPosition 10, 130, 100, 24
+	l.Caption = "Hydrographic Coverage:"
+
+	hydrographicCoverageTextEdit = w.AddTextEdit()
+	hydrographicCoverageTextEdit.SetPosition 130, 128, 50, 24
+	hydrographicCoverageTextEdit.Text = body.Water * 100
+
+	l = w.AddLabel()
+	l.SetPosition 185, 130, 50, 24
+	l.Caption = "0 to 100%"
+
+	l = w.AddLabel()
+	l.SetPosition 10, 165, 100, 24
+	l.Caption = "Volcanic Activity:"
+
+	volcanicActivityDropList = w.AddDropList()
+	volcanicActivityDropList.SetPosition 95, 163, 120, 24
+	For i = 1 To Ubound(GEOLOGICAL_ACTIVITY_ARRAY) + 1
+		volcanicActivityDropList.AddItem GEOLOGICAL_ACTIVITY_ARRAY(i - 1)
+	Next
+
+	If Not GetGURPSValue(body, "volcanic_activity") = "" Then
+		volcanicActivityDropList.Text = GEOLOGICAL_ACTIVITY_ARRAY(GetGURPSValue(body, "volcanic_activity"))
+	End If
+
+	l = w.AddLabel()
+	l.SetPosition 10, 200, 100, 24
+	l.Caption = "Tectonic Activity:"
+
+	tectonicActivityDropList = w.AddDropList()
+	tectonicActivityDropList.SetPosition 95, 198, 120, 24
+	For i = 1 To Ubound(GEOLOGICAL_ACTIVITY_ARRAY) + 1
+		tectonicActivityDropList.AddItem GEOLOGICAL_ACTIVITY_ARRAY(i - 1)
+	Next
+
+	If Not GetGURPSValue(body, "tectonic_activity") = "" Then
+		tectonicActivityDropList.Text = GEOLOGICAL_ACTIVITY_ARRAY(GetGURPSValue(body, "tectonic_activity"))
+	End If
+
+	l = w.AddLabel()
+	l.SetPosition 10, 235, 100, 24
+	l.Caption = "Resource Value:"
+
+	resourceValueDropList = w.AddDropList()
+	resourceValueDropList.SetPosition 95, 232, 120, 24
+	For i = 3 To Ubound(RESOURCE_VALUE_ARRAY) - 1
+		resourceValueDropList.AddItem RESOURCE_VALUE_ARRAY(i - 1)
+	Next
+
+	If Not GetGURPSValue(body, "resource_value") = "" Then
+		resourceValueDropList.Text = RESOURCE_VALUE_ARRAY(GetGURPSValue(body, "resource_value")+5)
+	End If
+
+	'Display the display
+	If w.ShowModal Then
+
+		If terrestrialDropList.Text = "" Then
+			MsgBox "Terrestrial Size, Type, and Atmospheric Composition is required.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+		If volcanicActivityDropList.Text = "" Then
+			MsgBox "Volcanic Activity is required.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+		If tectonicActivityDropList.Text = "" Then
+			MsgBox "Tectonic Activity is required.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+		If resourceValueDropList.Text = "" Then
+			MsgBox "Resource Value is required.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+		'Split out the Terrestrial Size, Type, and Atmospheric Composition
+		temp = Split(terrestrialDropList.Text, " (", 2)
+		temp2 = Split(temp(1), ") - ", 2)
+		terrestrialSize = temp(0)
+		terrestrialType = temp2(0)
+		atmosphericComposition = temp2(1)
+
+		'Set the Terrestrial Size
+		For i = 1 to Ubound(TERRESTRIAL_SIZE_ARRAY) + 1
+			If TERRESTRIAL_SIZE_ARRAY(i - 1) = terrestrialSize Then
+				SetGURPSValue body, "terrestrial_size", i - 1
+			End If
+		Next
+
+		'Set the Terrestrial Type
+		For i = 1 to Ubound(TERRESTRIAL_TYPE_ARRAY) + 1
+			If TERRESTRIAL_TYPE_ARRAY(i - 1) = terrestrialType Then
+				SetGURPSValue body, "terrestrial_type", i - 1
+			End If
+		Next
+
+		'Set the Atmospheric Composition
+		For i = 1 to Ubound(ATMOSPHERIC_COMPOSITION_ARRAY) + 1
+			If ATMOSPHERIC_COMPOSITION_ARRAY(i - 1) = atmosphericComposition Then
+				SetGURPSValue body, "atmospheric_composition", i - 1
+			End If
+		Next
+
+		'Validate the Mean Temperature
+		If Not IsNumeric(meanTemperatureTextEdit.Text) Then
+			MsgBox "Mean Temperature must be a number.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+		If meanTemperatureTextEdit.Text < 0 Then
+			MsgBox "Mean Temperature cannot be less than 0.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+		'Validate the Atmospheric Pressure
+		If Not IsNumeric(atmosphericPressureTextEdit.Text) Then
+			MsgBox "Atmospheric Pressure must be a number.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+		If atmosphericPressureTextEdit.Text < 0 Then
+			MsgBox "Atmospheric Pressure cannot be less than 0.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+		'Validate the Hydrographic Coverage
+		If Not IsNumeric(hydrographicCoverageTextEdit.Text) Then
+			MsgBox "Hydrographic Coverage must be a number.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+		If hydrographicCoverageTextEdit.Text < 0 Or hydrographicCoverageTextEdit.Text > 100 Then
+			MsgBox "Hydrographic Coverage must be between 0 and 100.",16
+			EditTerrestrialGUI(body)
+			Exit Sub
+		End If
+
+
+		'Set the Volcanic Activity
+		For i = 1 to Ubound(GEOLOGICAL_ACTIVITY_ARRAY) + 1
+			If GEOLOGICAL_ACTIVITY_ARRAY(i - 1) = volcanicActivityDropList.Text Then
+				SetGURPSValue body, "volcanic_activity", i - 1
+			End If
+		Next
+
+		'Set the Tectonic Activity
+		For i = 1 to Ubound(GEOLOGICAL_ACTIVITY_ARRAY) + 1
+			If GEOLOGICAL_ACTIVITY_ARRAY(i - 1) = tectonicActivityDropList.Text Then
+				SetGURPSValue body, "tectonic_activity", i - 1
+			End If
+		Next
+
+		'Set the Resource Value
+		For i = 1 to Ubound(RESOURCE_VALUE_ARRAY) + 1
+			If RESOURCE_VALUE_ARRAY(i - 1) = resourceValueDropList.Text Then
+				SetGURPSValue body, "resource_value", i - 6
+			End If
+		Next
+
+		'Build Atmosphere and Hydrographic Coverage
+		BuildAtmosphereAndHydrographicCoverage(body)
+
+		body.Temp = meanTemperatureTextEdit.Text
+		body.Atmosphere = atmosphericPressureTextEdit.Text
+		body.Water = hydrographicCoverageTextEdit.Text / 100
+
+		'Build the atmospheric density
+		BuildAtmosphereDensity(body)
+
+		'Build the climate type
+		BuildClimateType(body)
+
+		'Build the habitability score
+		BuildHabitabilityValue(body)
+
+		'Display the body
+		DisplayTerrestrialBody(body)
+
+	End If
+End Sub
+
+'------------------------------------------------------------------------------
+'Include Files
+'------------------------------------------------------------------------------
+Sub Include(FilePath)
+	Dim FSO, s, TS
+	Set FSO = CreateObject("Scripting.FileSystemObject")
+	Set TS = FSO.OpenTextFile(PluginDirectory() & "\" & FilePath, 1, False)
+	s = TS.ReadAll
+	TS.Close
+	Set TS = Nothing
+	Set FSO = Nothing
+	ExecuteGlobal s
+End Sub

@@ -1,0 +1,399 @@
+#plugin GURPS Suite Upgrade
+#author Alan Bartholet
+#desc   Perfoms various upgrades on selected systems generated with older versions of the GURPS Suite.
+
+'Includes
+Include "GURPSSuite.lib.vbs"
+
+'Declare global variables
+Dim sector                                         'as Sector
+Dim unloadBody, systemUpgradeFlag                  'as Bool
+Dim planetoidUpgradeFlag, ammoniaPlanetUpgradeFlag    'as Bool
+
+'Load the sector
+sector = GetCurrentSector
+
+'Call the main sub
+UpgradeGUI()
+
+Sub Upgrade()
+	'Declare variables
+	Dim body                        'as Body
+	Dim i, keyHit                   'as Int
+	Dim selectedCount, buildCount   'as Int
+
+	SetDefaultConfig()
+
+	'Display processing message
+	sector.RenderMessageBig = "Running GURPS Suite Upgrade..."
+	sector.RenderMessageSmall = "Press 'Esc' to Exit"
+	RefreshScene
+
+	selectedCount = 0
+	For i = 1 To sector.SystemCount
+		body = sector.GetSystem(i - 1)
+		If body.Selected Then
+			selectedCount = selectedCount + 1
+		End If
+	Next
+
+	buildCount = 0
+	'Loop through all systems
+	For i = 1 To sector.SystemCount
+
+		'Check for Escape Key
+		keyHit = GetKey()
+		If keyHit = 27 Then
+			Exit Sub
+		End If
+		ProcessMessages
+
+		'Select the current root body
+		body = sector.GetSystem(i - 1)
+
+		If body.Selected Then
+			'Make sure the root body is loaded
+			If Not body.Loaded Then
+				sector.DynaLoad(body) 'Load the body into memory
+				unloadBody = TRUE     'Flag the body to be unloaded
+			End If
+
+			'Display processing message
+			If FormatNumber((buildCount / selectedCount) * 100, 0) Mod 5 = 0 Then
+				sector.RenderMessageBig = "Running GURPS Suite Upgrade: " & FormatNumber((buildCount / selectedCount) * 100, 0) & "%"
+				sector.RenderMessageSmall = "Press 'Esc' to Exit"
+				RefreshScene
+			End If
+
+			'Build the system
+			UpgradeSystem body
+
+			'Unload the body if there haven't been any changes made
+			If unloadBody = TRUE Then
+				sector.DynaUnload(body)    'Unload the body from memory
+			Else
+				body.UpdateRootBody()      'Update the root body
+				body.ModifySystem()        'Flag the system as modified
+			End If
+
+			buildCount = buildCount + 1
+		End If
+	Next
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Upgrade the System
+'------------------------------------------------------------------------------
+Sub UpgradeSystem(body)
+	'Declare variables
+
+	'If this is the root body or the root body doesn't doesn't have a stellar age
+	'we need to set the stellar age
+	'If Not body.HasParent() Or GetGURPSValue(body.GetRootBody, "stellar_age") = "" Then
+	'SetStellarAge body.GetRootBody, GetStellarAge
+	'End If
+
+	'Upgrade Star Body
+	If body.TypeID = BODY_TYPE_STAR Then
+		UpgradeStarBody body
+
+	'Upgrade Terrestrial Body
+	ElseIf body.TypeID = BODY_TYPE_TERRESTRIAL Then
+		UpgradeTerrestrialBody body
+
+	'Upgrade Gas Giant Body
+	ElseIf body.TypeID = BODY_TYPE_GASGIANT Then
+		UpgradeGasGiantBody body
+
+	'Upgrade Asteroid Belt Body
+	ElseIf body.TypeID = BODY_TYPE_ASTEROIDBELT Then
+		UpgradeAsteroidBeltBody body
+
+	'Upgrade Planetoid Body
+	ElseIf body.TypeID = BODY_TYPE_PLANETOID Then
+		UpgradePlanetoidBody body
+
+	'Upgrade Small Body
+	'ElseIf body.TypeID = BODY_TYPE_SMALLBODY Then
+	'UpgradeSmallBody body
+	End If
+
+	'Loop through each child body
+	If body.ChildrenCount() > 0 Then
+		For i = 1 To body.ChildrenCount()
+			'Upgrade each child body
+			UpgradeSystem body.GetChild(i - 1)
+		Next
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Upgrade Star Body
+'------------------------------------------------------------------------------
+Sub UpgradeStarBody(body)
+
+	If systemUpgradeFlag = TRUE Then
+		'Declare variables
+		Dim stellarAge      'as Float
+
+		If GetGURPSValue(body, "suite_version") = "" Then
+			stellarAge = Left(body.GetField("stellarage"), InStr(body.GetField("stellarage"), " "))
+
+			If stellarAge = "" Then
+				stellarAge = Left(body.GetField("stellaragelabel"), InStr(body.GetField("stellaragelabel"), " "))
+			End If
+
+			If Len(stellarAge) > 0 Then
+				SetGURPSValue body, "stellar_age", stellarAge
+
+				'Display the body
+				DisplayStarBody(body)
+			End If
+		End If
+	End If
+
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Upgrade Asteroid Belt Body
+'------------------------------------------------------------------------------
+Sub UpgradeAsteroidBeltBody(body)
+
+	If systemUpgradeFlag = TRUE Then
+		'Declare variables
+		Dim resourceValue      'as string
+
+		If GetGURPSValue(body, "suite_version") = "" Then
+			If Len(body.GetField("resourcevalue")) > 2 Then
+				resourceValue = body.GetField("resourcevalue")
+
+			ElseIf Len(body.GetField("resourcevaluelabel")) > 2 Then
+				resourceValue = body.GetField("resourcevaluelabel")
+			End If
+
+			If Len(resourceValue) > 0 Then
+				'Set the Resource Value
+				For i = 1 to Ubound(RESOURCE_VALUE_ARRAY) + 1
+					If RESOURCE_VALUE_ARRAY(i - 1) = resourceValue Then
+						SetGURPSValue body, "resource_value", i - 6
+					End If
+				Next
+
+				'Build the habitability value
+				BuildHabitabilityValue(body)
+
+				'Display the body
+				DisplayAsteroidBeltBody(body)
+			End If
+		End If
+	End If
+
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Upgrade Planetoid Body
+'------------------------------------------------------------------------------
+Sub UpgradePlanetoidBody(body)
+
+	If systemUpgradeFlag = TRUE Or planetoidUpgradeFlag = TRUE Then
+		If GetGURPSValue(body, "suite_version") = "" Then
+			'Build the climate type
+			BuildClimateType(body)
+
+			'Build the resource value
+			BuildResourceValue(body)
+
+			'Build the habitability value
+			BuildHabitabilityValue(body)
+
+			'Display the body
+			DisplayPlanetoidBody(body)
+		End If
+	End If
+
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Upgrade Gas Giant Body
+'------------------------------------------------------------------------------
+Sub UpgradeGasGiantBody(body)
+
+	If systemUpgradeFlag = TRUE Then
+		If GetGURPSValue(body, "suite_version") = "" Then
+			BuildGasGiantBody(body)
+		End If
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Upgrade Terrestrial Body
+'------------------------------------------------------------------------------
+Sub UpgradeTerrestrialBody(body)
+	Dim terrestrialSize, terrestrialType                      'as int
+	Dim atmosphericComposition, atmosphericDensity            'as int
+	Dim volcanicActivity, tectonicActivity, resourceValue     'as String
+	Dim version                                               'as String
+
+	If systemUpgradeFlag = TRUE Then
+		If GetGURPSValue(body, "suite_version") = "" Then
+			terrestrialSize = body.GetField("size")
+			terrestrialType = body.GetField("type")
+			atmosphericComposition = body.GetField("atmosphericcomposition")
+			atmosphericDensity = body.GetField("atmosphericdensity")
+
+			If Len(body.GetField("volcanicactivity")) > 1 Then
+				volcanicActivity = body.GetField("volcanicactivity")
+
+			ElseIf Len(body.GetField("volcanicactivitylabel")) > 1 Then
+				volcanicActivity = body.GetField("volcanicactivitylabel")
+			End If
+
+			If Len(body.GetField("tectonicactivity")) > 1 Then
+				tectonicActivity = body.GetField("tectonicactivity")
+
+			ElseIf Len(body.GetField("tectonicactivitylabel")) > 1 Then
+				tectonicActivity = body.GetField("tectonicactivitylabel")
+			End If
+
+			If Len(body.GetField("resourcevalue")) > 2 Then
+				resourceValue = body.GetField("resourcevalue")
+
+			ElseIf Len(body.GetField("resourcevaluelabel")) > 2 Then
+				resourceValue = body.GetField("resourcevaluelabel")
+			End If
+
+			If Len(terrestrialSize) > 0 Then
+				'Set the Terrestrial Size
+				For i = 1 to Ubound(TERRESTRIAL_SIZE_ARRAY) + 1
+					If TERRESTRIAL_SIZE_ARRAY(i - 1) = terrestrialSize Then
+						SetGURPSValue body, "terrestrial_size", i - 1
+					End If
+				Next
+
+				'Set the Terrestrial Type
+				For i = 1 to Ubound(TERRESTRIAL_TYPE_ARRAY) + 1
+					If TERRESTRIAL_TYPE_ARRAY(i - 1) = terrestrialType Then
+						SetGURPSValue body, "terrestrial_type", i - 1
+					End If
+				Next
+
+				'Set the Atmospheric Composition
+				SetGURPSValue body, "atmospheric_composition", atmosphericComposition
+
+				'Set the Volcanic Activity
+				For i = 1 to Ubound(GEOLOGICAL_ACTIVITY_ARRAY) + 1
+					If GEOLOGICAL_ACTIVITY_ARRAY(i - 1) = volcanicActivity Then
+						SetGURPSValue body, "volcanic_activity", i - 1
+					End If
+				Next
+
+				'Set the Tectonic Activity
+				For i = 1 to Ubound(GEOLOGICAL_ACTIVITY_ARRAY) + 1
+					If GEOLOGICAL_ACTIVITY_ARRAY(i - 1) = tectonicActivity Then
+						SetGURPSValue body, "tectonic_activity", i - 1
+					End If
+				Next
+
+				'Set the Resource Value
+				For i = 1 to Ubound(RESOURCE_VALUE_ARRAY) + 1
+					If RESOURCE_VALUE_ARRAY(i - 1) = resourceValue Then
+						SetGURPSValue body, "resource_value", i - 6
+					End If
+				Next
+
+				'Build Atmosphere and Hydrographic Coverage
+				BuildAtmosphereAndHydrographicCoverage(body)
+
+				'Build the atmospheric density
+				BuildAtmosphereDensity(body)
+
+				'Build the climate type
+				BuildClimateType(body)
+
+				'Build the habitability score
+				BuildHabitabilityValue(body)
+
+				'Display the body
+				DisplayTerrestrialBody(body)
+
+			End If
+		End If
+	End If
+
+	If ammoniaPlanetUpgradeFlag = TRUE Then
+		'Get the revision number
+		version = GetGURPSValue(body, "suite_version")
+		If Right(version, Len(version) - InStrRev(version, ".")) <= 64 Then
+
+			'Get the mass of the parent star
+			If Not IsNull(body.GetParentStar) Then
+				StarMass = body.GetParentStar.Mass
+			Else
+				StarMass = 0
+			End If
+
+			'Rebuild Ammonia Terrestrial Type planets that have a parent star with a mass greater than 0.65
+			If GetGURPSValue(body, "terrestrial_type") = 4 And StarMass > 0.65 Then
+				BuildTerrestrialBody(body)
+			End If
+		End If
+	End If
+
+End Sub
+
+
+'------------------------------------------------------------------------------
+'GUI for Selecting Upgrades
+'------------------------------------------------------------------------------
+Sub UpgradeGUI()
+
+	'Make the interface
+	w = NewDialogWindow()
+	w.SetPosition 10, 20, 210, 160
+	w.Centered = TRUE
+
+	'System Upgrade
+	systemUpgradeCheckbox = w.AddCheckbox()
+	systemUpgradeCheckbox.SetPosition 10, 10, 180, 24
+	systemUpgradeCheckbox.Caption = "GURPS System Upgrade."
+
+	'Planetoid Upgrade
+	planetoidUpgradeCheckbox = w.AddCheckbox()
+	planetoidUpgradeCheckbox.SetPosition 10, 35, 180, 24
+	planetoidUpgradeCheckbox.Caption = "Planetoid Upgrade."
+
+	'Ammonia Planet Upgrade
+	ammoniaPlanetUpgradeCheckbox = w.AddCheckbox()
+	ammoniaPlanetUpgradeCheckbox.SetPosition 10, 60, 180, 24
+	ammoniaPlanetUpgradeCheckbox.Caption = "Ammonia Planet Upgrade."
+
+	'Display the display
+	If w.ShowModal Then
+		systemUpgradeFlag = systemUpgradeCheckbox.Checked
+		planetoidUpgradeFlag = planetoidUpgradeCheckbox.Checked
+		ammoniaPlanetUpgradeFlag = ammoniaPlanetUpgradeCheckbox.Checked
+
+		Upgrade()
+	End If
+End Sub
+
+
+'------------------------------------------------------------------------------
+'Include Files
+'------------------------------------------------------------------------------
+Sub Include(FilePath)
+	Dim FSO, s, TS
+	Set FSO = CreateObject("Scripting.FileSystemObject")
+	Set TS = FSO.OpenTextFile(PluginDirectory() & "\" & FilePath, 1, FALSE)
+	s = TS.ReadAll
+	TS.Close
+	Set TS = Nothing
+	Set FSO = Nothing
+	ExecuteGlobal s
+End Sub
